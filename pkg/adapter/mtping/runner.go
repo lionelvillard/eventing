@@ -22,13 +22,13 @@ import (
 	"math/rand"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	cecontext "github.com/cloudevents/sdk-go/v2/context"
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/client-go/kubernetes"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -36,7 +36,6 @@ import (
 	kncloudevents "knative.dev/eventing/pkg/adapter/v2"
 	"knative.dev/eventing/pkg/adapter/v2/util/crstatusevent"
 	sourcesv1alpha2 "knative.dev/eventing/pkg/apis/sources/v1alpha2"
-	"knative.dev/eventing/pkg/utils/cache"
 )
 
 type cronJobsRunner struct {
@@ -59,6 +58,29 @@ type cronJobsRunner struct {
 type entryIdConfig struct {
 	entryID cron.EntryID
 	config  *PingConfig
+}
+
+type PingConfig struct {
+	corev1.ObjectReference `json:",inline"`
+
+	// Schedule is the cronjob schedule. Defaults to `* * * * *`.
+	Schedule string `json:"schedule"`
+
+	// JsonData is json encoded data used as the body of the event posted to
+	// the sink. Default is empty. If set, datacontenttype will also be set
+	// to "application/json".
+	// +optional
+	JsonData string `json:"jsonData,omitempty"`
+
+	// Extensions specify what attribute are added or overridden on the
+	// outbound event. Each `Extensions` key-value pair are set on the event as
+	// an attribute extension independently.
+	// +optional
+	Extensions map[string]string `json:"extensions,omitempty"`
+
+	// SinkURI is the current active sink URI that has been configured for the
+	// Source.
+	SinkURI string `json:"sinkUri,omitempty"`
 }
 
 const (
@@ -154,66 +176,4 @@ func message(body string) interface{} {
 		return Message{Body: body}
 	}
 	return objmap
-}
-
-func (a *cronJobsRunner) updateFromConfigMap(cm *corev1.ConfigMap) {
-	a.Logger.Info("synchronizing configmap")
-	data, ok := cm.Data[cache.ResourcesKey]
-	if !ok {
-		// Shouldn't happened.
-		a.Logger.Warn("missing configmap key", zap.Any("key", cache.ResourcesKey))
-		return
-	}
-
-	var cfgs PingConfigs
-	err := json.Unmarshal([]byte(data), &cfgs)
-	if err != nil {
-		// Shouldn't happened.
-		a.Logger.Warn("cannot unmarshal ping source configuration", zap.Error(err))
-		return
-	}
-
-	keys := make(map[string]bool)
-	for k := range a.entryids {
-		keys[k] = true
-	}
-
-	for key, cfg := range cfgs {
-		cfg.APIVersion = sourcesv1alpha2.SchemeGroupVersion.String()
-		cfg.Kind = "PingSource"
-
-		// Is the schedule already cached?
-		if entry, ok := a.entryids[key]; ok {
-			if !equality.Semantic.DeepEqual(entry.config, &cfg) {
-				a.Logger.Info("updating schedule ", zap.String("key", key))
-
-				// Recreate cronjob
-				a.RemoveSchedule(entry.entryID)
-
-				a.entryids[key] = entryIdConfig{
-					entryID: a.AddSchedule(cfg),
-					config:  &cfg,
-				}
-			} else {
-				// cron jon exists and correctly configure. noop.
-			}
-		} else {
-			a.Logger.Info("adding schedule ", zap.String("key", key))
-			// Create cronjob
-			a.entryids[key] = entryIdConfig{
-				entryID: a.AddSchedule(cfg),
-				config:  &cfg,
-			}
-		}
-
-		delete(keys, key)
-	}
-
-	for key := range keys {
-		if entry, ok := a.entryids[key]; ok {
-			a.Logger.Info("deleting schedule", zap.Any("key", key))
-			a.RemoveSchedule(entry.entryID)
-			delete(a.entryids, key)
-		}
-	}
 }
