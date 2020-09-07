@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Event
+metadata:
+  name: test-ping-source.1632930b265ae68e
+  namespace: test-ping-source
+involvedObject:
+  apiVersion: sources.knative.dev/v1beta1
+  kind: PingSource
+  name: test-ping-source
+  namespace: redex
+message: 'Sink not found: {"ref":{"kind":"Channel","namespace":"testnamespace","name":"testsink","apiVersion":"messaging.knative.dev/v1beta1"}}'
+reason: SinkNotFound
+type: Warning
