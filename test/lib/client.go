@@ -50,6 +50,7 @@ type Client struct {
 
 	Namespace string
 	T         *testing.T
+	Parallel  bool
 	Tracker   *Tracker
 
 	podsCreated []string

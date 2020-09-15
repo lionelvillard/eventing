@@ -148,6 +148,13 @@ var SetupClientOptionNoop SetupClientOption = func(*Client) {
 func Setup(t *testing.T, runInParallel bool, options ...SetupClientOption) *Client {
 	// Create a new namespace to run this test case.
 	namespace := makeK8sNamespace(t.Name())
+	return SetupWithNamespace(t, runInParallel, namespace, options...)
+
+}
+
+// Setup creates the client objects needed in the e2e tests,
+// and does other setups, like creating namespaces, set the test case to run in parallel, etc.
+func SetupWithNamespace(t *testing.T, runInParallel bool, namespace string, options ...SetupClientOption) *Client {
 	t.Logf("namespace is : %q", namespace)
 	client, err := NewClient(
 		pkgTest.Flags.Kubeconfig,
@@ -157,6 +164,7 @@ func Setup(t *testing.T, runInParallel bool, options ...SetupClientOption) *Clie
 	if err != nil {
 		t.Fatalf("Couldn't initialize clients: %v", err)
 	}
+	client.Parallel = runInParallel
 
 	CreateNamespaceIfNeeded(t, client, namespace)
 

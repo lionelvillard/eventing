@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"testing"
 
-	"knative.dev/eventing/pkg/reconciler/sugar"
-
 	sourcesv1beta1 "knative.dev/eventing/pkg/apis/sources/v1beta1"
 	sugarresources "knative.dev/eventing/pkg/reconciler/sugar/resources"
 	"knative.dev/eventing/test/lib/recordevents"
@@ -36,8 +34,37 @@ import (
 	testlib "knative.dev/eventing/test/lib"
 	"knative.dev/eventing/test/lib/resources"
 
+	"knative.dev/eventing/pkg/reconciler/sugar"
 	eventingtesting "knative.dev/eventing/pkg/reconciler/testing"
+	"knative.dev/eventing/pkg/test"
 )
+
+func TestPingSourceV1Beta1NG(t *testing.T) {
+	test.NewTest(t).Run(func(ctx test.TestContext) {
+		// Create an observer where to send events to
+		observer := ctx.NewObserverOrFail()
+
+		// Create our PingSource
+		ctx.CreateFromYAMLOrFail(fmt.Sprintf(pingSourceTemplate, uuid.NewUUID(), observer.Name()))
+
+		ctx.Eventually(ctx.Get()).Should(matchers.BeReady())
+		//Eventually(client.Logs(eventrecorder.Name)).Should(SatisfyAll(
+		//	HaveEventCount(1))))
+	})
+}
+
+const pingSourceTemplate = `
+apiVersion: sources.knative.dev/v1beta1
+kind: PingSource
+metadata:
+  name: e2e-ping-source
+spec:
+  jsonData: '{"msg":"TestPingSource %s"}'
+  sink:
+    ref:
+      apiVersion: v1
+      kind: Service
+      name: %s`
 
 func TestPingSourceV1Beta1(t *testing.T) {
 	const (
